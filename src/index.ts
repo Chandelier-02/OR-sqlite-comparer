@@ -74,6 +74,35 @@ const traverse = async (dir: Dir, inheritedPositionName?: string) => {
 
 await traverse(parentDir);
 
+const compareSnapshotStoreDatasQuery = (p1: string, p2: string) => {
+  const sqlQuery = `
+SELECT
+  hex(S1.objectId) as id1,
+  hex(S1.objectId) as id2
+  hex(S1.objectHash) as hash1,
+  hex(S2.objectHash) as hash2,
+  json_array_length(S1.data, "$.participants") as participants,
+  json_array_length(S2.data, "$.participants") as participants2,
+  json_array_length(S1.data, "$.locations") as locations1,
+  json_array_length(S2.data, "$.locations") as locations2,
+  json_array_length(S1.data, "$.signalingEvents") as sigEvents1,
+  json_array_length(S2.data, "$.signalingEvents") as sigEvents2,
+  json_array_length(S1.data, "$.callEvents") as callEvents1,
+  json_array_length(S2.data, "$.callEvents") as callEvents2,
+  json_pretty(S1.data) as data1,
+  json_pretty(S2.data) as data2,
+FROM
+  "${p1}".snapshots as S1,
+  "${p2}".snapshots as S2
+WHERE
+  s1.objectId = s2.objectId AND s1.data != s2.data 
+  `;
+
+  return sqlQuery;
+};
+
+console.log(repositoryToPositionFiles);
+
 for (const [storename, positionFiles] of repositoryToPositionFiles) {
   for (let i = 0; i < positionFiles.length; i++) {
     for (let j = i + 1; j < positionFiles.length; j++) {
@@ -88,8 +117,14 @@ for (const [storename, positionFiles] of repositoryToPositionFiles) {
       const db = new Database(":memory:");
       db.exec(`ATTACH DATABASE '${positionFiles[i].path} as "${p1DbName}"`);
       db.exec(`ATTACH DATABASE '${positionFiles[j].path} as "${p2DbName}"`);
+
+      const stmt = db.prepare(
+        compareSnapshotStoreDatasQuery(p1DbName, p2DbName)
+      );
+
+      const results = stmt.all();
+
+      console.dir(results);
     }
   }
 }
-
-console.log(repositoryToPositionFiles);
